@@ -1,4 +1,6 @@
 # Jet Havoc
+![](https://github.com/ap0calypse8/jet-havoc/blob/main/Screenshot%202024-09-01%20051754.png)
+
 
 **Jet Havoc** is an exciting action game where you control a jet plane to destroy asteroids and avoid obstacles. Use the arrow keys to navigate and the space bar to shoot powerful beams at incoming asteroids. Charge your beam for a more powerful shot and collect orbs to use as shields.
 
