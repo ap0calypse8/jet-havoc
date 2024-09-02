@@ -1,12 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Jet from './Jet';
 import Asteroid from './Asteroid';
 import Beam from './Beam';
 import Background from './Background';
 import Particles from './Particles';
-import Shield from './Shield'; // Import the new Shield component
+import Shield from './Shield';
+import TouchControls from './TouchControls';
+import shootSoundFile from '../assets/sounds/shoot.mp3';
+import explosionSoundFile from '../assets/sounds/explosion.mp3';
+import gameOverSoundFile from '../assets/sounds/game-over.mp3';
 
 const Game = () => {
+  const shootSoundRef = useRef(null);
+  const explosionSoundRef = useRef(null);
+  const gameOverSoundRef = useRef(null);
+
   const [score, setScore] = useState(0);
   const [asteroids, setAsteroids] = useState([]);
   const [beams, setBeams] = useState([]);
@@ -14,11 +22,27 @@ const Game = () => {
   const [gameOver, setGameOver] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const [difficulty, setDifficulty] = useState(1);
-  const [asteroidSpawnRate, setAsteroidSpawnRate] = useState(0.05); // Increased initial spawn rate
+  const [asteroidSpawnRate, setAsteroidSpawnRate] = useState(0.05);
   const [particles, setParticles] = useState([]);
   const [shieldActive, setShieldActive] = useState(false);
   const [shieldTimer, setShieldTimer] = useState(null);
   const [powerUps, setPowerUps] = useState([]);
+  const [showDifficultyButtons, setShowDifficultyButtons] = useState(false);
+
+  const startGame = (selectedDifficulty) => {
+    setGameStarted(true);
+    setGameOver(false);
+    setScore(0);
+    setAsteroids([]);
+    setBeams([]);
+    setJetPosition({ x: 50, y: 20 });
+    setDifficulty(selectedDifficulty);
+    setAsteroidSpawnRate(0.05 * selectedDifficulty);
+    setShieldActive(false);
+    clearTimeout(shieldTimer);
+    setShieldTimer(null);
+    setPowerUps([]);
+  };
 
   const generateAsteroid = useCallback(() => {
     return {
@@ -35,6 +59,7 @@ const Game = () => {
       position: { x: jetPosition.x + 1.5, y: jetPosition.y + 7.5 },
     };
     setBeams(prevBeams => [...prevBeams, newBeam]);
+    playSound(shootSoundRef);
   }, [jetPosition]);
 
   const checkCollision = useCallback((rect1, rect2) => {
@@ -55,21 +80,6 @@ const Game = () => {
     
     return distance < (radius1 + radius2);
   }, []);
-
-  const startGame = () => {
-    setGameStarted(true);
-    setGameOver(false);
-    setScore(0);
-    setAsteroids([]);
-    setBeams([]);
-    setJetPosition({ x: 50, y: 20 });
-    setDifficulty(1);
-    setAsteroidSpawnRate(0.05);
-    setShieldActive(false);
-    clearTimeout(shieldTimer);
-    setShieldTimer(null);
-    setPowerUps([]);
-  };
 
   const createParticles = useCallback((x, y, color, count, size, lifetime) => {
     const newParticles = Array.from({ length: count }, () => ({
@@ -98,6 +108,56 @@ const Game = () => {
       type: 'shield',
     };
   }, []);
+
+  const handleTouchMove = useCallback((x) => {
+    if (!gameStarted || gameOver) return;
+    const gameWidth = window.innerWidth;
+    const newX = (x / gameWidth) * 100;
+    setJetPosition(prev => ({ ...prev, x: Math.max(0, Math.min(94, newX)) }));
+  }, [gameStarted, gameOver]);
+
+  const handleTouchFire = useCallback(() => {
+    if (!gameStarted || gameOver) return;
+    fireBeam();
+  }, [gameStarted, gameOver, fireBeam]);
+
+  const handleExplosion = useCallback(() => {
+    // Create explosion particles
+    createParticles(jetPosition.x, jetPosition.y, '#FFA500', 30, 3, 30);
+    // Play explosion sound
+    playSound(explosionSoundRef);
+  }, [jetPosition, createParticles]);
+
+  const handleGameOver = useCallback(() => {
+    // Set game over state
+    setGameOver(true);
+    // Play game over sound
+    playSound(gameOverSoundRef);
+  }, []);
+
+  const playSound = (audioRef) => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(error => {
+        console.error('Error playing sound:', error);
+      });
+    }
+  };
+
+  const handleKeydown = useCallback((event) => {
+    if (event.code === 'Space') {
+      console.log('Space key pressed, playing shoot sound');
+      playSound(shootSoundRef);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeydown);
+    return () => {
+      document.removeEventListener('keydown', handleKeydown);
+    };
+  }, [handleKeydown]);
 
   useEffect(() => {
     if (!gameStarted || gameOver) return;
@@ -147,9 +207,11 @@ const Game = () => {
             if (shieldActive) {
               // Destroy asteroid but don't end game
               createParticles(asteroid.position.x, asteroid.position.y, '#00FFFF', 20, 2, 20);
+              handleExplosion(); // Play explosion sound
               return false;
             } else {
               setGameOver(true);
+              handleGameOver(); // Play game over sound
               return false;
             }
           }
@@ -175,6 +237,7 @@ const Game = () => {
               top: 100 - beam.position.y - 2,
               bottom: 100 - beam.position.y
             })));
+            handleExplosion(); // Play explosion sound
             return false;
           }
 
@@ -280,7 +343,15 @@ const Game = () => {
         <Background />
         <div className="start-menu">
           <h1 className="game-title">JET HAVOC</h1>
-          <button onClick={startGame}>Start Game</button>
+          {!showDifficultyButtons ? (
+            <button onClick={() => setShowDifficultyButtons(true)}>Start Game</button>
+          ) : (
+            <>
+              <button onClick={() => startGame(1)}>Easy</button>
+              <button onClick={() => startGame(1.5)}>Medium</button>
+              <button onClick={() => startGame(2)}>Hard</button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -315,13 +386,22 @@ const Game = () => {
         />
       ))}
       <Particles particles={particles} />
+      <TouchControls 
+        onMove={handleTouchMove} 
+        onFire={handleTouchFire} 
+        gameStarted={gameStarted}
+        gameOver={gameOver}
+      />
       {gameOver && (
         <div className="game-over">
           <p>Game Over</p>
           <p>Final Score: {score}</p>
-          <button onClick={startGame}>Restart</button>
+          <button onClick={() => startGame(difficulty)}>Restart</button>
         </div>
       )}
+      <audio src={shootSoundFile} ref={shootSoundRef} />
+      <audio src={explosionSoundFile} ref={explosionSoundRef} />
+      <audio src={gameOverSoundFile} ref={gameOverSoundRef} />
     </div>
   );
 };
